@@ -86,8 +86,22 @@ impl Board {
         self.tiles[x][y].is_none()
     }
 
-    fn is_selectable(&self, (x, y): Point) -> bool {
-        self.tiles[x][y].as_ref().unwrap().team == self.current_player
+    fn is_friendly(&self, (x,y): Point) -> bool {
+        let piece = self.tiles[x][y].as_ref();
+        if piece.is_none() {
+            return false;
+        }
+
+        piece.unwrap().team == self.current_player
+    }
+
+    fn is_enemy(&self, (x,y) : Point) -> bool {
+        let piece = self.tiles[x][y].as_ref();
+        if piece.is_none() {
+            return false;
+        }
+
+        piece.unwrap().team != self.current_player
     }
 
     fn enumerate_tiles<F: Fn(&Piece, Point) -> bool>(&self, closure: F) -> Vec<Point> {
@@ -111,6 +125,12 @@ impl Board {
 
     pub fn get_selectable(&self) -> Vec<Point> {
         self.enumerate_tiles(|piece, point| piece.team == self.current_player)
+    }
+
+    pub fn get_enemies(&self) -> Vec<Point> {
+        self.enumerate_tiles(|piece, (x, y)| {
+            piece.team != self.current_player
+        })
     }
 
     pub fn get_attackable(&self) -> Vec<Point> {
