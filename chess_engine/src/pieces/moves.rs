@@ -1,168 +1,167 @@
-use super::MoveGenerator;
+use crate::chess_move::*;
 use crate::*;
 
-fn in_bounds((x, y): Point) -> bool {
-    x < 8 && y < 8
-}
-
-fn int_in_bounds(x: i32, y: i32) -> bool {
+fn in_bounds(x: i32, y: i32) -> bool {
     x >= 0 && x < 8 && y >= 0 && y < 8
 }
 
-fn place_if_empty(x : i32, y: i32, grid: &mut BoolGrid, board: &Board) {
-    if !int_in_bounds(x, y) {
+fn place_regular(from: Point, (x, y): Point, collection: &mut MoveCollection) {
+    let to = (x as usize, y as usize);
+    collection.insert(to, Box::new(RegularMove::new(from, to)));
+}
+
+fn place_if_empty(from: Point, x: i32, y: i32, collection: &mut MoveCollection, board: &Board) {
+    if !in_bounds(x, y) {
         return;
     }
 
-    let x = x as usize;
-    let y = y as usize;
-
-    grid[x][y] = board.is_empty((x, y))
+    let to = (x as usize, y as usize);
+    if board.is_empty(to) {
+        place_regular(from, to, collection);
+    }
 }
 
-fn place_if_enemy(x : i32, y: i32, grid: &mut BoolGrid, board: &Board) {
-    if !int_in_bounds(x, y) {
+fn place_if_enemy(from: Point, x: i32, y: i32, collection: &mut MoveCollection, board: &Board) {
+    if !in_bounds(x, y) {
         return;
     }
 
-    let x = x as usize;
-    let y = y as usize;
-
-    let pawn = board.tiles[x][y].as_ref();
-    if pawn.is_none() {
-        return;
+    let to = (x as usize, y as usize);
+    if board.is_enemy(to) {
+        place_regular(from, to, collection);
     }
-
-    let is_enemy = pawn.unwrap().team != board.current_player;
-    grid[x][y] = is_enemy;
 }
 
-fn place_if_possible(x : i32, y: i32, mut grid: &mut BoolGrid, board: &Board) {
-    place_if_empty(x, y, &mut grid, board);
-    place_if_enemy(x, y, &mut grid, board);
+fn place_if_possible(from: Point, x: i32, y: i32, collection: &mut MoveCollection, board: &Board) {
+    place_if_empty(from, x, y, collection, board);
+    place_if_enemy(from, x, y, collection, board);
 }
 
-pub fn place_beam(dx : i32, dy: i32, pos: Point, mut grid: &mut BoolGrid, board: &Board){
-    let mut int_x = pos.0 as i32;
-    let mut int_y = pos.1 as i32; 
+fn place_beam(from: Point, dx: i32, dy: i32, collection: &mut MoveCollection, board: &Board) {
+    let mut x = from.0 as i32;
+    let mut y = from.1 as i32;
 
-    loop{
-        int_x += dx;
-        int_y += dy;
-        if !int_in_bounds(int_x, int_y){
+    loop {
+        x += dx;
+        y += dy;
+        if !in_bounds(x, y) {
             break;
         }
 
-        let x = int_x as usize;
-        let y = int_y as usize;
+        let pos = (x as usize, y as usize);
+        if !board.is_empty(pos) {
+            place_if_enemy(from, x, y, collection, board);
 
-        if !board.is_empty((x, y)){
-            grid[x][y] = board.is_enemy((x,y));
             break;
         }
 
-        grid[x][y] = true;
+        place_regular(from, pos, collection);
     }
 }
 
-pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board) -> BoolGrid {
+pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
     let stride = board.config.white_stride * piece.team as i32;
-    let mut tiles = EMPTY_BOOLGRID;
-
-    let steps = if piece.has_moved {
-        1
-    } else {
-        board.config.pawn_extra_steps
-    };
+    let mut tiles = MoveCollection::new();
 
     let x = pos.0 as i32;
-    let mut y = pos.1 as i32;    
+    let y = pos.1 as i32 + stride;
 
-    for i in 0..steps {
-        y += stride;
+    place_if_empty(pos, x, y, &mut tiles, board);
+    place_if_enemy(pos, x - 1, y, &mut tiles, board);
+    place_if_enemy(pos, x + 1, y, &mut tiles, board);
 
-        if y < 0 || y >= 8 {
-            break;
+    let y = y + stride;
+    if !piece.has_moved {
+        place_if_empty(pos, x, y, &mut tiles, board);
+    }
+
+    //rusta kod, mycket för pengarna
+    if board.config.pawn_en_passant {
+        let previous = board.history.front();
+        if previous.is_some() {
+            let last_tile = previous.unwrap().get_target_tile();
+            let previous = board.tiles[last_tile.0][last_tile.1];
+
+            if previous.is_some() {
+                let previous = previous.unwrap();
+                if previous.name == "Pawn" && previous.team != board.current_player {
+                    place_regular(pos, last_tile, &mut tiles);
+                }
+            }
         }
-
-        place_if_empty(x, y, &mut tiles, board);
-        place_if_enemy(x - 1, y , &mut tiles, board);
-        place_if_enemy(x + 1, y, &mut tiles, board);
     }
 
     tiles
 }
 
-pub fn king_moves(piece: &Piece, pos: Point, board: &Board) -> BoolGrid {
-    let mut grid = EMPTY_BOOLGRID;
+pub fn king_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+    let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;
 
     for i in 0..3 {
         for j in 0..3 {
-            place_if_possible(1 - i + x, 1 - j + y, &mut grid, board);
+            place_if_possible(pos, 1 - i + x, 1 - j + y, &mut tiles, board);
         }
     }
 
-    grid
+    tiles
 }
 
-pub fn rook_moves(piece: &Piece, (x, y): Point, board: &Board) -> BoolGrid {
-    let mut grid = EMPTY_BOOLGRID;
+pub fn rook_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+    let mut tiles = MoveCollection::new();
 
-    place_beam(1, 0, (x, y), &mut grid, board);
-    place_beam(-1, 0, (x, y), &mut grid, board);
+    place_beam(pos, 1, 0, &mut tiles, board);
+    place_beam(pos, -1, 0, &mut tiles, board);
 
-    place_beam(0, 1, (x, y), &mut grid, board);
-    place_beam(0, -1, (x, y), &mut grid, board);
+    place_beam(pos, 0, 1, &mut tiles, board);
+    place_beam(pos, 0, -1, &mut tiles, board);
 
-    grid
+    tiles
 }
 
-pub fn bishop_moves(piece: &Piece, (x, y): Point, board: &Board) -> BoolGrid {
-    let mut grid = EMPTY_BOOLGRID;
-    place_beam(1, 1, (x, y), &mut grid, board);
-    place_beam(-1, -1, (x, y), &mut grid, board);
-    place_beam(-1, 1, (x, y), &mut grid, board);
-    place_beam(1, -1, (x, y), &mut grid, board);
+pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+    let mut tiles = MoveCollection::new();
 
-    
-    place_beam(1, 0, (x, y), &mut grid, board);
-    place_beam(-1, 0, (x, y), &mut grid, board);
-    place_beam(0, 1, (x, y), &mut grid, board);
-    place_beam(0, -1, (x, y), &mut grid, board);
+    place_beam(pos, 1, 1, &mut tiles, board);
+    place_beam(pos, -1, -1, &mut tiles, board);
+    place_beam(pos, -1, 1, &mut tiles, board);
+    place_beam(pos, 1, -1, &mut tiles, board);
 
-    grid
+    tiles
 }
 
-pub fn queen_moves(piece: &Piece, (x, y): Point, board: &Board) -> BoolGrid {
-    let mut grid = EMPTY_BOOLGRID;
-    place_beam(1, 1, (x, y), &mut grid, board);
-    place_beam(-1, -1, (x, y), &mut grid, board);
+pub fn queen_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+    let mut tiles = MoveCollection::new();
+    place_beam(pos, 1, 1, &mut tiles, board);
+    place_beam(pos, -1, -1, &mut tiles, board);
+    place_beam(pos, -1, 1, &mut tiles, board);
+    place_beam(pos, 1, -1, &mut tiles, board);
 
-    place_beam(-1, 1, (x, y), &mut grid, board);
-    place_beam(1, -1, (x, y), &mut grid, board);
+    place_beam(pos, 1, 0, &mut tiles, board);
+    place_beam(pos, -1, 0, &mut tiles, board);
+    place_beam(pos, 0, 1, &mut tiles, board);
+    place_beam(pos, 0, -1, &mut tiles, board);
 
-    grid
+    tiles
 }
 
-pub fn knight_moves(pieces: &Piece, pos: Point, board: &Board) -> BoolGrid {
-    let mut grid = EMPTY_BOOLGRID;
+pub fn knight_moves(pieces: &Piece, pos: Point, board: &Board) -> MoveCollection {
+    let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;
 
-    place_if_possible(x + 2, y + 1, &mut grid, board);
-    place_if_possible(x + 1, y + 2, &mut grid, board);
+    place_if_possible(pos, x + 2, y + 1, &mut tiles, board);
+    place_if_possible(pos, x + 1, y + 2, &mut tiles, board);
 
-    place_if_possible(x - 2, y + 1, &mut grid, board);
-    place_if_possible(x - 1, y + 2, &mut grid, board);
+    place_if_possible(pos, x - 2, y + 1, &mut tiles, board);
+    place_if_possible(pos, x - 1, y + 2, &mut tiles, board);
 
-    place_if_possible(x + 2, y - 1, &mut grid, board);
-    place_if_possible(x + 1, y - 2, &mut grid, board);
+    place_if_possible(pos, x + 2, y - 1, &mut tiles, board);
+    place_if_possible(pos, x + 1, y - 2, &mut tiles, board);
 
-    place_if_possible(x - 2, y - 1, &mut grid, board);
-    place_if_possible(x - 1, y - 2, &mut grid, board);
+    place_if_possible(pos, x - 2, y - 1, &mut tiles, board);
+    place_if_possible(pos, x - 1, y - 2, &mut tiles, board);
 
-
-    grid
+    tiles
 }

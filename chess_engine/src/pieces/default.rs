@@ -33,7 +33,7 @@ pub fn bishop(team: Team) -> Piece {
         has_moved: false,
         team: team,
         worth: 3,
-        ptr_getmoves: Rc::new(bishop_moves)
+        ptr_getmoves: Rc::new(bishop_moves),
     }
 }
 
@@ -42,9 +42,9 @@ pub fn rook(team: Team) -> Piece {
         name: "Bishop".to_owned(),
         necessity: false,
         has_moved: false,
-        team:team,
+        team: team,
         worth: 5,
-        ptr_getmoves: Rc::new(rook_moves)
+        ptr_getmoves: Rc::new(rook_moves),
     }
 }
 
@@ -55,7 +55,7 @@ pub fn knight(team: Team) -> Piece {
         has_moved: false,
         team: team,
         worth: 3,
-        ptr_getmoves: Rc::new(knight_moves)
+        ptr_getmoves: Rc::new(knight_moves),
     }
 }
 
@@ -63,9 +63,9 @@ pub fn queen(team: Team) -> Piece {
     Piece {
         name: "Queen".to_owned(),
         necessity: false,
-        has_moved: false, 
+        has_moved: false,
         team: team,
         worth: 9,
-        ptr_getmoves: Rc::new(queen_moves)
+        ptr_getmoves: Rc::new(queen_moves),
     }
 }

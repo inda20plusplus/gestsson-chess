@@ -5,7 +5,7 @@ pub type BoardGenerator = Box<dyn Fn(&mut Vec<Vec<ChessTile>>)>;
 
 pub struct BoardConfig {
     pub white_stride: i32,
-    pub pawn_extra_steps: i32,
+    pub pawn_en_passant: bool,
     pub place_pawns: BoardGenerator,
 }
 
@@ -13,7 +13,7 @@ impl BoardConfig {
     pub fn default() -> Self {
         Self {
             white_stride: -1,
-            pawn_extra_steps: 2,
+            pawn_en_passant: true,
             place_pawns: Box::new(place_defaults),
         }
     }
@@ -37,7 +37,6 @@ pub fn place_defaults(tiles: &mut Vec<Vec<ChessTile>>) {
 
     tiles[3][7] = create_piece!(queen, Team::White);
     tiles[3][0] = create_piece!(queen, Team::Black);
-
 
     tiles[2][7] = create_piece!(bishop, Team::White);
     tiles[5][7] = create_piece!(bishop, Team::White);

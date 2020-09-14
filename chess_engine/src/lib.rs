@@ -1,9 +1,13 @@
+mod chess_move;
 mod configuration;
 mod pieces;
 
+use chess_move::*;
 use configuration::*;
 use pieces::*;
 
+use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::mem::replace;
 
 #[cfg(test)]
@@ -21,7 +25,6 @@ mod tests {
         let mut board = Board::new(None);
 
         assert!(board.select((1, 6)));
-        assert!(board.possible_moves[1][5]);
         assert!(board.move_piece((1, 5)));
 
         assert!(board.current_player == Team::Black);
@@ -41,11 +44,56 @@ mod tests {
         assert!(board.tiles[1][4].as_ref().unwrap().team == Team::Black);
         //Ladies and gentlemen, we got em
     }
+
+    #[test]
+    fn queen_move() {
+        let mut board = Board::new(None);
+        assert!(board.select((3, 6)));
+        assert!(board.move_piece((3, 4)));
+
+        assert!(board.select((3, 1)));
+        assert!(board.move_piece((3, 3)));
+
+        assert!(board.select((3, 7)));
+        assert!(board.move_piece((3, 5)));
+
+        assert!(board.select((4, 1)));
+        assert!(board.move_piece((4, 3)));
+        assert!(board.select((3, 5)));
+
+        assert!(board.move_piece((5, 3)));
+    }
+
+    #[test]
+    fn history() {
+        let mut board = Board::new(None);
+
+        for i in 0..100 {
+            assert!(board.select((3, 6)));
+            assert!(board.move_piece((3, 4)));
+
+            assert!(board.undo_last());
+        }
+
+        assert!(board.select((3, 6)));
+        assert!(board.move_piece((3, 4)));
+
+        assert!(board.select((3, 1)));
+        assert!(board.move_piece((3, 3)));
+
+        assert!(board.undo_last());
+        assert!(board.undo_last());
+
+        assert!(board.select((3, 6)));
+        assert!(board.move_piece((3, 4)));
+    }
 }
 
 pub type Point = (usize, usize);
 pub type ChessTile = Option<Piece>;
 pub type BoolGrid = [[bool; 8]; 8];
+pub type BoardCollection = Vec<Vec<ChessTile>>;
+pub type MoveCollection = HashMap<Point, Box<dyn ChessMove>>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Team {
@@ -54,16 +102,16 @@ pub enum Team {
 }
 
 pub struct Board {
-    pub tiles: Vec<Vec<ChessTile>>,
-    pub possible_moves: BoolGrid,
+    pub tiles: BoardCollection,
+    pub possible_moves: MoveCollection,
     pub finished: bool,
     pub held_piece: Option<Point>,
     pub current_player: Team,
     pub winner: Option<Team>,
     pub config: BoardConfig,
+    pub history: VecDeque<Box<dyn ChessMove>>,
 }
 
-const EMPTY_BOOLGRID: BoolGrid = [[false; 8]; 8];
 impl Board {
     pub fn new(configuration: Option<BoardConfig>) -> Board {
         let configuration = configuration.unwrap_or(BoardConfig::default());
@@ -73,12 +121,13 @@ impl Board {
 
         Self {
             tiles: tiles,
-            possible_moves: EMPTY_BOOLGRID,
+            possible_moves: MoveCollection::new(),
             finished: false,
             held_piece: None,
             winner: None,
             current_player: Team::White,
             config: configuration,
+            history: VecDeque::new(),
         }
     }
 
@@ -86,7 +135,7 @@ impl Board {
         self.tiles[x][y].is_none()
     }
 
-    fn is_friendly(&self, (x,y): Point) -> bool {
+    fn is_friendly(&self, (x, y): Point) -> bool {
         let piece = self.tiles[x][y].as_ref();
         if piece.is_none() {
             return false;
@@ -95,7 +144,7 @@ impl Board {
         piece.unwrap().team == self.current_player
     }
 
-    fn is_enemy(&self, (x,y) : Point) -> bool {
+    fn is_enemy(&self, (x, y): Point) -> bool {
         let piece = self.tiles[x][y].as_ref();
         if piece.is_none() {
             return false;
@@ -104,7 +153,7 @@ impl Board {
         piece.unwrap().team != self.current_player
     }
 
-    fn enumerate_tiles<F: Fn(&Piece, Point) -> bool>(&self, closure: F) -> Vec<Point> {
+    fn enumerate_pieces<F: Fn(&Piece, Point) -> bool>(&self, closure: F) -> Vec<Point> {
         let mut ret = Vec::<Point>::new();
         for i in 0..8 {
             for j in 0..8 {
@@ -124,18 +173,29 @@ impl Board {
     }
 
     pub fn get_selectable(&self) -> Vec<Point> {
-        self.enumerate_tiles(|piece, point| piece.team == self.current_player)
+        self.enumerate_pieces(|piece, point| piece.team == self.current_player)
     }
 
     pub fn get_enemies(&self) -> Vec<Point> {
-        self.enumerate_tiles(|piece, (x, y)| {
-            piece.team != self.current_player
-        })
+        self.enumerate_pieces(|piece, (x, y)| piece.team != self.current_player)
+    }
+
+    pub fn get_movable(&self) -> Vec<Point> {
+        let mut ret = Vec::<Point>::new();
+        for i in 0..8 {
+            for j in 0..8 {
+                if self.possible_moves.contains_key(&(i, j)) {
+                    ret.push((i, j));
+                }
+            }
+        }
+
+        ret
     }
 
     pub fn get_attackable(&self) -> Vec<Point> {
-        self.enumerate_tiles(|piece, (x, y)| {
-            piece.team != self.current_player && self.possible_moves[x][y]
+        self.enumerate_pieces(|piece, point| {
+            piece.team != self.current_player && self.possible_moves.contains_key(&point)
         })
     }
 
@@ -157,36 +217,35 @@ impl Board {
         true
     }
 
-    pub fn move_piece(&mut self, (to_x, to_y): Point) -> bool {
+    pub fn move_piece(&mut self, to: Point) -> bool {
         if self.held_piece.is_none() {
             return false;
         }
 
-        if !self.possible_moves[to_x][to_y] {
+        let chessmove = self.possible_moves.remove(&to);
+        if chessmove.is_none() {
             return false;
         }
 
-        let (from_x, from_y) = self.held_piece.unwrap();
+        let mut chessmove = chessmove.unwrap();
+        chessmove.perform(&mut self.tiles);
 
-        let temp = self.tiles[from_x][from_y].to_owned();
-        let killed = replace(&mut self.tiles[to_x][to_y], temp);
-
-        self.kill_piece(&killed);
-        self.tiles[from_x][from_y] = None;
+        self.history.push_front(chessmove);
         self.swap_team();
 
         true
     }
 
-    fn kill_piece(&mut self, piece: &Option<Piece>) {
-        if piece.is_none() {
-            return;
+    pub fn undo_last(&mut self) -> bool {
+        let chessmove = self.history.pop_front();
+        if chessmove.is_none() {
+            return false;
         }
 
-        if piece.as_ref().unwrap().necessity {
-            self.finished = true;
-            self.winner = Option::from(self.current_player);
-        }
+        chessmove.unwrap().reverse(&mut self.tiles);
+        self.swap_team();
+
+        true
     }
 
     fn swap_team(&mut self) {
