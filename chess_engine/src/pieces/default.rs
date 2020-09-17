@@ -39,7 +39,7 @@ pub fn bishop(team: Team) -> Piece {
 
 pub fn rook(team: Team) -> Piece {
     Piece {
-        name: "Bishop".to_owned(),
+        name: "Rook".to_owned(),
         necessity: false,
         has_moved: false,
         team: team,
@@ -50,7 +50,7 @@ pub fn rook(team: Team) -> Piece {
 
 pub fn knight(team: Team) -> Piece {
     Piece {
-        name: "Horse".to_owned(),
+        name: "Knight".to_owned(),
         necessity: false,
         has_moved: false,
         team: team,

@@ -1,6 +1,6 @@
-mod chess_move;
-mod configuration;
-mod pieces;
+pub mod chess_move;
+pub mod configuration;
+pub mod pieces;
 
 use chess_move::*;
 use configuration::*;
@@ -15,9 +15,33 @@ mod tests {
     use crate::*;
 
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-        assert_eq!((2, 4), (2, 4))
+    fn castling() {
+        let mut board = Board::new(None);
+        for (x, y) in board.enumerate_pieces(|piece, point| {
+            !piece.necessity && piece.name != "Rook"
+        }){
+            board.tiles[x][y] = None
+        }
+
+        assert!(board.select((4,7)));
+        assert!(board.move_piece((2,7)));
+
+        assert!(board.select((4,0)));
+        for i in board.get_movable(){
+            println!("{} {}", i.0, i.1);
+        }
+        assert!(!board.move_piece((2,0)));
+        assert!(board.move_piece((6,0)));
+
+        assert!(board.undo_last());
+        assert!(board.undo_last());
+
+        assert!(board.select((4,7)));
+        assert!(board.move_piece((6,7)));
+
+        assert!(board.select((4,0)));
+        assert!(!board.move_piece((6,0)));
+        assert!(board.move_piece((2,0)));
     }
 
     #[test]
@@ -40,9 +64,14 @@ mod tests {
         assert!(attackable.contains(&(1, 4)));
 
         assert!(board.move_piece((1, 4)));
-
         assert!(board.tiles[1][4].as_ref().unwrap().team == Team::Black);
         //Ladies and gentlemen, we got em
+
+        assert!(board.select((3, 6)));
+        assert!(board.move_piece((3,5)));
+
+        assert!(board.select((1,4)));
+        assert!(!board.move_piece((1,2)));
     }
 
     #[test]
@@ -62,6 +91,27 @@ mod tests {
         assert!(board.select((3, 5)));
 
         assert!(board.move_piece((5, 3)));
+    }
+
+    #[test]
+    fn en_passant() {
+        let mut board = Board::new(None);
+
+        assert!(board.select((1, 6)));
+        assert!(board.move_piece((1, 4)));
+
+        assert!(board.select((1,1)));
+        assert!(board.move_piece((1,2)));
+
+        assert!(board.select((1, 4)));
+        assert!(board.move_piece((1, 3)));
+
+        assert!(board.select((2, 1)));
+        assert!(board.move_piece((2, 3)));
+
+        assert!(board.select((1,3)));
+
+        assert!(board.move_piece((2,2)));
     }
 
     #[test]
@@ -112,6 +162,7 @@ pub struct Board {
     pub history: VecDeque<Box<dyn ChessMove>>,
 }
 
+static EMPTY_BOOLGRID : BoolGrid = [[false; 8]; 8];
 impl Board {
     pub fn new(configuration: Option<BoardConfig>) -> Board {
         let configuration = configuration.unwrap_or(BoardConfig::default());
@@ -129,6 +180,21 @@ impl Board {
             config: configuration,
             history: VecDeque::new(),
         }
+    }
+
+    pub fn get_threatened(&self) -> BoolGrid {
+        let mut grid = EMPTY_BOOLGRID;
+
+        for point in self.get_enemies(){
+            let piece = self.tiles[point.0][point.1].as_ref().unwrap();
+            let moves = piece.get_moves(point, self, true);
+
+            for p in moves.keys() {
+                grid[p.0][p.1] = true;
+            }
+        }
+
+        grid
     }
 
     fn is_empty(&self, (x, y): Point) -> bool {
@@ -213,7 +279,7 @@ impl Board {
         }
 
         self.held_piece = Option::from(point);
-        self.possible_moves = piece.get_moves(point, &self);
+        self.possible_moves = piece.get_moves(point, &self, false);
         true
     }
 
@@ -226,7 +292,7 @@ impl Board {
         if chessmove.is_none() {
             return false;
         }
-
+        
         let mut chessmove = chessmove.unwrap();
         chessmove.perform(&mut self.tiles);
 

@@ -1,6 +1,10 @@
 use crate::chess_move::*;
 use crate::*;
 
+use std::cmp::max;
+use std::cmp::min;
+
+
 fn in_bounds(x: i32, y: i32) -> bool {
     x >= 0 && x < 8 && y >= 0 && y < 8
 }
@@ -8,6 +12,36 @@ fn in_bounds(x: i32, y: i32) -> bool {
 fn place_regular(from: Point, (x, y): Point, collection: &mut MoveCollection) {
     let to = (x as usize, y as usize);
     collection.insert(to, Box::new(RegularMove::new(from, to)));
+}
+
+fn place_enpassant(from: Point, mut x: i32, y: i32, stride : i32,  collection: &mut MoveCollection, board: &Board) {
+    if !in_bounds(x, y + stride){
+        return;
+    }
+
+    let target = (x  as usize, (y + stride)  as usize);
+    let killpos= (x as usize, y as usize);
+
+    if !board.is_empty(target) || !board.is_enemy(killpos) || board.history.len() == 0 {
+        return;
+    }
+
+    let previous = board.history.front().unwrap().as_regular();
+    if previous.is_none(){
+        return;
+    }
+
+    let previous = previous.unwrap();
+    if previous.to != killpos {
+        return;
+    }
+
+    let piece = board.tiles[previous.to.0][previous.to.1].as_ref().unwrap();
+    let distance = max(previous.from.1, previous.to.1) - min(previous.from.1, previous.to.1);
+
+    if piece.name == "Pawn" && distance == 2 {
+        collection.insert(target, Box::new(EnPassant::new(from, target, killpos)));
+    }
 }
 
 fn place_if_empty(from: Point, x: i32, y: i32, collection: &mut MoveCollection, board: &Board) {
@@ -59,12 +93,20 @@ fn place_beam(from: Point, dx: i32, dy: i32, collection: &mut MoveCollection, bo
     }
 }
 
-pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let stride = board.config.white_stride * piece.team as i32;
     let mut tiles = MoveCollection::new();
 
     let x = pos.0 as i32;
-    let y = pos.1 as i32 + stride;
+    let y = pos.1 as i32;
+
+
+    if board.config.pawn_en_passant {
+        place_enpassant(pos, x - 1, y, stride, &mut tiles, board);
+        place_enpassant(pos, x + 1, y, stride, &mut tiles, board);
+    }
+
+    let y = y + stride;
 
     place_if_empty(pos, x, y, &mut tiles, board);
     place_if_enemy(pos, x - 1, y, &mut tiles, board);
@@ -75,26 +117,10 @@ pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
         place_if_empty(pos, x, y, &mut tiles, board);
     }
 
-    //rusta kod, mycket för pengarna
-    if board.config.pawn_en_passant {
-        let previous = board.history.front();
-        if previous.is_some() {
-            let last_tile = previous.unwrap().get_target_tile();
-            let previous = board.tiles[last_tile.0][last_tile.1];
-
-            if previous.is_some() {
-                let previous = previous.unwrap();
-                if previous.name == "Pawn" && previous.team != board.current_player {
-                    place_regular(pos, last_tile, &mut tiles);
-                }
-            }
-        }
-    }
-
     tiles
 }
 
-pub fn king_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn king_moves(piece: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;
@@ -105,10 +131,45 @@ pub fn king_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
         }
     }
 
+    //castling
+    if !only_lethal && pos.0 == 4 && (pos.1 == 0 || pos.1 == 7) {
+        let threatened = board.get_threatened();
+
+        for rook in board.enumerate_pieces(|piece, point| {
+            piece.name == "Rook" && piece.team == board.current_player
+        }){
+            if rook.1 != pos.1 || (rook.0 != 0 && rook.0 != 7){
+                continue;
+            }
+
+            let mut x = pos.0;
+            let mut can_castle = true;
+            while x != rook.0 {
+                if x != pos.0 && (!board.is_empty((x, rook.1)) || threatened[x][rook.1]){
+                    println!("epic fail, {} {}", !board.is_empty((x, rook.1)), threatened[x][rook.1] );
+
+                    can_castle = false;
+                    break;
+                }
+
+                if x > rook.0 {
+                    x -= 1;
+                }else{
+                    x += 1;
+                }
+            }
+
+            if can_castle {
+                let mv = Box::new(Castling::new(rook, pos));
+                tiles.insert(mv.king_to, mv);   
+            }
+        }
+    }
+
     tiles
 }
 
-pub fn rook_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn rook_moves(piece: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
 
     place_beam(pos, 1, 0, &mut tiles, board);
@@ -120,7 +181,7 @@ pub fn rook_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
     tiles
 }
 
-pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
 
     place_beam(pos, 1, 1, &mut tiles, board);
@@ -131,7 +192,7 @@ pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection 
     tiles
 }
 
-pub fn queen_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn queen_moves(piece: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     place_beam(pos, 1, 1, &mut tiles, board);
     place_beam(pos, -1, -1, &mut tiles, board);
@@ -146,7 +207,7 @@ pub fn queen_moves(piece: &Piece, pos: Point, board: &Board) -> MoveCollection {
     tiles
 }
 
-pub fn knight_moves(pieces: &Piece, pos: Point, board: &Board) -> MoveCollection {
+pub fn knight_moves(pieces: &Piece, pos: Point, board: &Board, only_lethal : bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;
