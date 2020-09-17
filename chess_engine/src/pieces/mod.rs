@@ -16,7 +16,7 @@ pub struct Piece {
 }
 
 impl Piece {
-    pub fn get_moves(&self, point: Point, board: &Board, only_lethal : bool) -> MoveCollection {
+    pub fn get_moves(&self, point: Point, board: &Board, only_lethal: bool) -> MoveCollection {
         (self.ptr_getmoves)(&self, point, &board, only_lethal)
     }
 }

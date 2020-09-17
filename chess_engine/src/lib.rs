@@ -15,33 +15,74 @@ mod tests {
     use crate::*;
 
     #[test]
-    fn castling() {
+    fn check() {
         let mut board = Board::new(None);
-        for (x, y) in board.enumerate_pieces(|piece, point| {
-            !piece.necessity && piece.name != "Rook"
-        }){
+        for (x, y) in
+            board.enumerate_pieces(|piece, point| !piece.necessity && piece.name != "Rook")
+        {
             board.tiles[x][y] = None
         }
 
-        assert!(board.select((4,7)));
-        assert!(board.move_piece((2,7)));
+        assert!(board.select((7, 7)));
+        assert!(board.move_piece((7, 3)));
 
-        assert!(board.select((4,0)));
-        for i in board.get_movable(){
-            println!("{} {}", i.0, i.1);
+        assert!(!board.check);
+        assert!(board.select((0, 0)));
+        assert!(board.move_piece((0, 1)));
+        assert!(!board.check);
+
+        assert!(board.select((0, 7)));
+        assert!(board.move_piece((0, 1)));
+        assert!(!board.check);
+
+        assert!(board.select((4, 0)));
+        assert!(board.move_piece((4, 1)));
+
+        assert!(board.finished);
+        assert!(board.undo_last());
+
+        assert!(board.select((4, 0)));
+        assert!(board.move_piece((5, 0)));
+
+        assert!(board.select((7, 3)));
+        assert!(board.move_piece((7, 0)));
+
+        assert!(board.check);
+        assert!(board.finished);
+
+        assert!(board.undo_last());
+        assert!(board.select((0, 1)));
+        assert!(board.move_piece((0, 0)));
+
+        assert!(board.check);
+        assert!(!board.finished);
+    }
+
+    #[test]
+    fn castling() {
+        let mut board = Board::new(None);
+        for (x, y) in
+            board.enumerate_pieces(|piece, point| !piece.necessity && piece.name != "Rook")
+        {
+            board.tiles[x][y] = None
         }
-        assert!(!board.move_piece((2,0)));
-        assert!(board.move_piece((6,0)));
+
+        assert!(board.select((4, 7)));
+        assert!(board.move_piece((2, 7)));
+
+        assert!(board.select((4, 0)));
+        assert!(!board.move_piece((2, 0)));
+        assert!(board.move_piece((6, 0)));
 
         assert!(board.undo_last());
         assert!(board.undo_last());
 
-        assert!(board.select((4,7)));
-        assert!(board.move_piece((6,7)));
+        assert!(board.select((4, 7)));
+        assert!(board.move_piece((6, 7)));
 
-        assert!(board.select((4,0)));
-        assert!(!board.move_piece((6,0)));
-        assert!(board.move_piece((2,0)));
+        assert!(board.select((4, 0)));
+        assert!(!board.move_piece((6, 0)));
+        assert!(board.move_piece((2, 0)));
     }
 
     #[test]
@@ -68,10 +109,10 @@ mod tests {
         //Ladies and gentlemen, we got em
 
         assert!(board.select((3, 6)));
-        assert!(board.move_piece((3,5)));
+        assert!(board.move_piece((3, 5)));
 
-        assert!(board.select((1,4)));
-        assert!(!board.move_piece((1,2)));
+        assert!(board.select((1, 4)));
+        assert!(!board.move_piece((1, 2)));
     }
 
     #[test]
@@ -100,8 +141,8 @@ mod tests {
         assert!(board.select((1, 6)));
         assert!(board.move_piece((1, 4)));
 
-        assert!(board.select((1,1)));
-        assert!(board.move_piece((1,2)));
+        assert!(board.select((1, 1)));
+        assert!(board.move_piece((1, 2)));
 
         assert!(board.select((1, 4)));
         assert!(board.move_piece((1, 3)));
@@ -109,9 +150,9 @@ mod tests {
         assert!(board.select((2, 1)));
         assert!(board.move_piece((2, 3)));
 
-        assert!(board.select((1,3)));
+        assert!(board.select((1, 3)));
 
-        assert!(board.move_piece((2,2)));
+        assert!(board.move_piece((2, 2)));
     }
 
     #[test]
@@ -157,12 +198,14 @@ pub struct Board {
     pub finished: bool,
     pub held_piece: Option<Point>,
     pub current_player: Team,
+    pub current_enemy: Team,
     pub winner: Option<Team>,
     pub config: BoardConfig,
     pub history: VecDeque<Box<dyn ChessMove>>,
+    pub check: bool,
 }
 
-static EMPTY_BOOLGRID : BoolGrid = [[false; 8]; 8];
+static EMPTY_BOOLGRID: BoolGrid = [[false; 8]; 8];
 impl Board {
     pub fn new(configuration: Option<BoardConfig>) -> Board {
         let configuration = configuration.unwrap_or(BoardConfig::default());
@@ -177,15 +220,18 @@ impl Board {
             held_piece: None,
             winner: None,
             current_player: Team::White,
+            current_enemy: Team::Black,
             config: configuration,
             history: VecDeque::new(),
+            check: false,
         }
     }
 
-    pub fn get_threatened(&self) -> BoolGrid {
+    pub fn get_threatened(&self, team: Team) -> BoolGrid {
         let mut grid = EMPTY_BOOLGRID;
+        let pieces = self.enumerate_pieces(|piece, pos| piece.team != team);
 
-        for point in self.get_enemies(){
+        for point in pieces {
             let piece = self.tiles[point.0][point.1].as_ref().unwrap();
             let moves = piece.get_moves(point, self, true);
 
@@ -219,6 +265,15 @@ impl Board {
         piece.unwrap().team != self.current_player
     }
 
+    fn is_opposite(&self, (x, y): Point, team: Team) -> bool {
+        let piece = self.tiles[x][y].as_ref();
+        if piece.is_none() {
+            return false;
+        }
+
+        piece.unwrap().team != team
+    }
+
     fn enumerate_pieces<F: Fn(&Piece, Point) -> bool>(&self, closure: F) -> Vec<Point> {
         let mut ret = Vec::<Point>::new();
         for i in 0..8 {
@@ -242,21 +297,16 @@ impl Board {
         self.enumerate_pieces(|piece, point| piece.team == self.current_player)
     }
 
+    pub fn get_kings(&self) -> Vec<Point> {
+        self.enumerate_pieces(|piece, point| piece.necessity)
+    }
+
     pub fn get_enemies(&self) -> Vec<Point> {
         self.enumerate_pieces(|piece, (x, y)| piece.team != self.current_player)
     }
 
     pub fn get_movable(&self) -> Vec<Point> {
-        let mut ret = Vec::<Point>::new();
-        for i in 0..8 {
-            for j in 0..8 {
-                if self.possible_moves.contains_key(&(i, j)) {
-                    ret.push((i, j));
-                }
-            }
-        }
-
-        ret
+        self.possible_moves.keys().map(|key| *key).collect()
     }
 
     pub fn get_attackable(&self) -> Vec<Point> {
@@ -288,16 +338,64 @@ impl Board {
             return false;
         }
 
+        if !self.perform_move(to) {
+            return false;
+        }
+
+        self.check = self.check_check(self.current_player);
+        if self.check && self.check_checkmated() {
+            self.finished = true;
+            self.winner = Some(self.current_enemy);
+        }
+
+        if self.check_check(self.current_enemy) {
+            self.finished = true;
+            self.winner = Some(self.current_player);
+        }
+
+        true
+    }
+
+    fn perform_move(&mut self, to: Point) -> bool {
         let chessmove = self.possible_moves.remove(&to);
         if chessmove.is_none() {
             return false;
         }
-        
+
         let mut chessmove = chessmove.unwrap();
         chessmove.perform(&mut self.tiles);
 
         self.history.push_front(chessmove);
         self.swap_team();
+
+        true
+    }
+
+    fn check_check(&mut self, team: Team) -> bool {
+        let threat = self.get_threatened(team);
+
+        self.get_kings().iter().any(|(x, y)| threat[*x][*y])
+    }
+
+    fn check_checkmated(&mut self) -> bool {
+        let pieces = self.get_selectable();
+
+        for piece in pieces {
+            self.select(piece);
+
+            for mv in self.get_movable() {
+                self.perform_move(mv);
+
+                let check = self.check_check(self.current_enemy);
+                self.undo_last();
+
+                if !check {
+                    return false;
+                }
+
+                self.select(piece);
+            }
+        }
 
         true
     }
@@ -310,16 +408,16 @@ impl Board {
 
         chessmove.unwrap().reverse(&mut self.tiles);
         self.swap_team();
+        self.deselect();
+
+        self.finished = false;
+        self.winner = None;
 
         true
     }
 
     fn swap_team(&mut self) {
-        if self.current_player == Team::White {
-            self.current_player = Team::Black;
-        } else {
-            self.current_player = Team::White;
-        }
+        std::mem::swap(&mut self.current_player, &mut self.current_enemy);
     }
 
     pub fn deselect(&mut self) {
