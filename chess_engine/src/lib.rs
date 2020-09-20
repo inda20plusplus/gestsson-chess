@@ -293,6 +293,15 @@ impl Board {
         ret
     }
 
+    pub fn get_name(&self, (x, y) : Point) -> Option<String> {
+        let piece = self.tiles[x][y].as_ref();
+        if piece.is_none() {
+            return None;
+        }
+
+        Some(piece.unwrap().name.clone())
+    }
+
     pub fn get_selectable(&self) -> Vec<Point> {
         self.enumerate_pieces(|piece, point| piece.team == self.current_player)
     }
