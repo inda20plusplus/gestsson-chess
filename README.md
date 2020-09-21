@@ -36,3 +36,10 @@ där name kan vara
 "Queen"
 ```
 Jag rekommenderar att ta vara på detta genom att slänga in namnet i någon resource path / hashmap, samt checka efter namn på så få ställen som möjligt. 
+
+efter varje move måste 
+```rust
+can_promote(&self) -> bool,
+promote(&mut self, Team)
+```
+checkas för promotion. Rokad och en passant fixas via moves. 

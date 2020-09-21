@@ -289,6 +289,8 @@ impl Board {
 
         let (x, y) = piece[0];
         self.tiles[x][y] = Some(into);
+
+        self.update_win_status();
     }
 
     fn is_opposite(&self, (x, y): Point, team: Team) -> bool {
@@ -377,6 +379,12 @@ impl Board {
             return false;
         }
 
+        self.update_win_status();
+
+        true
+    }
+
+    fn update_win_status(&mut self){
         self.check = self.check_check(self.current_player);
         if self.check && self.check_checkmated() {
             self.finished = true;
@@ -387,8 +395,6 @@ impl Board {
             self.finished = true;
             self.winner = Some(self.current_player);
         }
-
-        true
     }
 
     fn perform_move(&mut self, to: Point) -> bool {
