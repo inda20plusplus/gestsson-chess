@@ -243,11 +243,11 @@ impl Board {
         grid
     }
 
-    fn is_empty(&self, (x, y): Point) -> bool {
+    pub fn is_empty(&self, (x, y): Point) -> bool {
         self.tiles[x][y].is_none()
     }
 
-    fn is_friendly(&self, (x, y): Point) -> bool {
+    pub fn is_friendly(&self, (x, y): Point) -> bool {
         let piece = self.tiles[x][y].as_ref();
         if piece.is_none() {
             return false;
@@ -256,13 +256,39 @@ impl Board {
         piece.unwrap().team == self.current_player
     }
 
-    fn is_enemy(&self, (x, y): Point) -> bool {
+    pub fn is_enemy(&self, (x, y): Point) -> bool {
         let piece = self.tiles[x][y].as_ref();
         if piece.is_none() {
             return false;
         }
 
         piece.unwrap().team != self.current_player
+    }
+
+    pub fn is_team(&self, (x, y): Point, team: Team) -> bool {
+        let tile = self.tiles[x][y].as_ref();
+        if tile.is_none() {
+            return false;
+        }
+
+        tile.unwrap().team == team
+    }
+
+    pub fn can_promote(&self) -> bool {
+        self.enumerate_pieces(|piece, pos| piece.name == "Pawn" && (pos.1 == 0 || pos.1 == 7))
+            .len()
+            > 0
+    }
+
+    pub fn promote(&mut self, into: Piece) {
+        let piece =
+            self.enumerate_pieces(|piece, pos| piece.name == "Pawn" && (pos.1 == 0 || pos.1 == 7));
+        if piece.len() == 0 {
+            return;
+        }
+
+        let (x, y) = piece[0];
+        self.tiles[x][y] = Some(into);
     }
 
     fn is_opposite(&self, (x, y): Point, team: Team) -> bool {
@@ -293,7 +319,7 @@ impl Board {
         ret
     }
 
-    pub fn get_name(&self, (x, y) : Point) -> Option<String> {
+    pub fn get_name(&self, (x, y): Point) -> Option<String> {
         let piece = self.tiles[x][y].as_ref();
         if piece.is_none() {
             return None;
