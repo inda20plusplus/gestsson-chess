@@ -1,11 +1,13 @@
 use chess_engine::Board; 
 use chess_engine::Team; 
+use chess_engine::pieces::default::*; 
 
 use ggez;
 use ggez::{graphics, Context, GameResult};
 use ggez::event::{self, MouseButton};
 use ggez::nalgebra as na;
 use std::path; 
+use dialog::DialogBox; 
 
 const BOARD_OFFSET_X: usize = 10; 
 const BOARD_OFFSET_Y: usize = 10; 
@@ -54,7 +56,27 @@ fn draw_grid(ctx: &mut ggez::Context) -> GameResult<()>{
     Ok(())
 }
 
-fn draw_piece(ctx: &mut ggez::Context, x: usize, y: usize, board: &mut Board) -> (){
+fn mark_movables(ctx: &mut ggez::Context, board: &mut Board) -> GameResult<()>{
+    let moves = board.get_movable(); 
+
+    if board.held_piece != None{
+        for point in moves.iter(){
+            let color = graphics::Color::from_rgb(0, 200, 170); 
+            let tile = new_tile(
+                ctx, 
+                (point.0*TILE_WIDTH+BOARD_OFFSET_X+15) as f32, 
+                (point.1*TILE_HEIGHT+BOARD_OFFSET_Y+15) as f32, 
+                (TILE_WIDTH-30) as f32,
+                (TILE_HEIGHT-30) as f32,
+                color,
+            ); 
+            graphics::draw(ctx, &tile, (na::Point2::new(0.0, 0.0),))?; 
+        }
+    }
+    Ok(())
+}
+
+fn draw_piece(ctx: &mut ggez::Context, x: usize, y: usize, board: &mut Board){
     if !board.is_empty((x, y)){
         let name = board.get_name((x, y)).unwrap(); 
 
@@ -75,7 +97,7 @@ fn draw_piece(ctx: &mut ggez::Context, x: usize, y: usize, board: &mut Board) ->
                 (x*TILE_WIDTH+BOARD_OFFSET_X+5) as f32, 
                 (y*TILE_HEIGHT+BOARD_OFFSET_Y+5) as f32, 
             ),),
-        );
+        ).unwrap();
     }
 }
 
@@ -88,10 +110,54 @@ fn add_pieces(board: &mut Board, ctx: &mut ggez::Context) -> GameResult<()>{
     Ok(())
 }
 
-fn place_piece(x: i64, y: i64) {
+fn place_piece(board: &mut Board, x: i64, y: i64) {
     if x != -1 && y != -1{
-        println!("X - {}, Y - {}", x, y); 
+        let moves = board.get_movable(); 
+
+        for point in moves.iter(){
+            if point.0 as i64 == x && point.1 as i64 == y{
+                board.move_piece(*point); 
+                if board.can_promote(){
+                    promote(board); 
+                }
+                println!("Winner: {:?}", board.winner); 
+                println!("Finished: {}", board.finished); 
+            }
+        }
+
+        board.deselect(); 
+
+        if board.held_piece == None {
+            if board.is_team((x as usize, y as usize), board.current_player){
+                board.select((x as usize, y as usize)); 
+            }
+        }
     }
+}
+
+fn promote(board: &mut Board){
+    let name = dialog::Input::new("Promote to: Queen (Q, q), Knight (N, n), Rook (R, r), Bishop (B, b)")
+            .title("Promotion")
+            .show()
+            .expect("Could not display dialog box")
+            .unwrap();
+    if name == "Q" || name == "q"{
+        board.promote(queen(board.current_enemy)); 
+        return; 
+    }
+    else if name == "N" || name == "n"{
+        board.promote(knight(board.current_enemy)); 
+        return; 
+    }
+    else if name == "R" || name == "r"{
+        board.promote(rook(board.current_enemy)); 
+        return; 
+    }
+    else if name == "B" || name == "b"{
+        board.promote(bishop(board.current_enemy)); 
+        return; 
+    }
+    promote(board); 
 }
 
 fn coordinates_to_tile(x: f32, y: f32) -> (i64, i64) {
@@ -125,6 +191,7 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut ggez::Context) -> GameResult {
         graphics::clear(ctx, [1.0, 1.0, 1.0, 1.0].into());
         draw_grid(ctx)?; 
+        mark_movables(ctx, &mut self.board)?; 
         add_pieces(&mut self.board, ctx)?;
         graphics::present(ctx)?;
         Ok(())
@@ -140,7 +207,7 @@ impl event::EventHandler for MainState {
         match _button{
             MouseButton::Left => {
                 let (x, y) = coordinates_to_tile(_x, _y); 
-                place_piece(x, y); 
+                place_piece(&mut self.board, x, y); 
             }
             _ => (),
         }
