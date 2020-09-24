@@ -110,6 +110,46 @@ fn add_pieces(board: &mut Board, ctx: &mut ggez::Context) -> GameResult<()>{
     Ok(())
 }
 
+fn display_text(ctx: &mut ggez::Context, txt: &str, x: f32, y: f32, font_size: f32){
+    let font = graphics::Font::new(ctx, "/Raleway-Black.ttf").unwrap();
+    let text = graphics::Text::new((txt, font, font_size)); 
+    graphics::draw(
+        ctx,
+        &text, 
+        (na::Point2::new(
+            (x) as f32, 
+            (y) as f32, 
+        ),),
+    ).unwrap();
+}
+
+fn display_state(ctx: &mut ggez::Context, board: &mut Board){
+    let current_player_message: &str; 
+    match board.current_player{
+        Team::White => current_player_message = "Current player: White",
+        _ => current_player_message = "Current player: Black",
+    }
+    display_text(ctx, current_player_message, 600.0, 20.0, 15.0); 
+
+    let check_message: &str; 
+    match board.check{
+        true => check_message = "Check: true",
+        _ => check_message = "Check: false",
+    }
+    display_text(ctx, check_message, 600.0, 60.0, 15.0);
+
+    if board.finished{
+        graphics::clear(ctx, [0.0, 0.0, 0.0, 0.2].into());
+        let winner_txt: &str; 
+        match board.winner{
+            Some(Team::Black) => winner_txt = "Black wins!",
+            Some(Team::White) => winner_txt = "White wins!",
+            _ => winner_txt = "Stalemate",
+        }
+        display_text(ctx, winner_txt, 200.0, 200.0, 100.0); 
+    }
+}
+
 fn place_piece(board: &mut Board, x: i64, y: i64) {
     if x != -1 && y != -1{
         let moves = board.get_movable(); 
@@ -120,10 +160,6 @@ fn place_piece(board: &mut Board, x: i64, y: i64) {
                 if board.can_promote(){
                     promote(board); 
                 }
-                /*
-                let finished = graphics::Text::new()
-                println!("Winner: {:?}", board.winner); 
-                println!("Finished: {}", board.finished); */
             }
         }
 
@@ -191,10 +227,11 @@ impl event::EventHandler for MainState {
     }
 
     fn draw(&mut self, ctx: &mut ggez::Context) -> GameResult {
-        graphics::clear(ctx, [1.0, 1.0, 1.0, 1.0].into());
+        graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
         draw_grid(ctx)?; 
         mark_movables(ctx, &mut self.board)?; 
         add_pieces(&mut self.board, ctx)?;
+        display_state(ctx, &mut self.board); 
         graphics::present(ctx)?;
         Ok(())
     }
@@ -218,7 +255,7 @@ impl event::EventHandler for MainState {
 
 pub fn main() -> GameResult { 
     let cb = ggez::ContextBuilder::new("Chess", "ggez")
-        .add_resource_path(path::PathBuf::from("./gui/images"))
+        .add_resource_path(path::PathBuf::from("./gui/resources"))
     ;
     let (ctx, event_loop) = &mut cb.build()?;
     let state = &mut MainState::new()?;
