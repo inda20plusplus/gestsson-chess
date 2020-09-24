@@ -120,8 +120,10 @@ fn place_piece(board: &mut Board, x: i64, y: i64) {
                 if board.can_promote(){
                     promote(board); 
                 }
+                /*
+                let finished = graphics::Text::new()
                 println!("Winner: {:?}", board.winner); 
-                println!("Finished: {}", board.finished); 
+                println!("Finished: {}", board.finished); */
             }
         }
 
@@ -216,7 +218,7 @@ impl event::EventHandler for MainState {
 
 pub fn main() -> GameResult { 
     let cb = ggez::ContextBuilder::new("Chess", "ggez")
-        .add_resource_path(path::PathBuf::from("./images"))
+        .add_resource_path(path::PathBuf::from("./gui/images"))
     ;
     let (ctx, event_loop) = &mut cb.build()?;
     let state = &mut MainState::new()?;
