@@ -259,10 +259,6 @@ dependencies = [
 [[package]]
 name = "chess_engine"
 version = "0.1.0"
-dependencies = [
- "dialog",
- "ggez",
-]
 
 [[package]]
 name = "clang-sys"
@@ -866,6 +862,15 @@ dependencies = [
  "approx",
  "rusttype 0.8.3",
  "xi-unicode",
+]
+
+[[package]]
+name = "gui"
+version = "0.1.0"
+dependencies = [
+ "chess_engine",
+ "dialog",
+ "ggez",
 ]
 
 [[package]]

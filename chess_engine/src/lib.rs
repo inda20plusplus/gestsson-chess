@@ -384,7 +384,7 @@ impl Board {
         true
     }
 
-    fn update_win_status(&mut self){
+    fn update_win_status(&mut self) {
         self.check = self.check_check(self.current_player);
         if self.check && self.check_checkmated() {
             self.finished = true;
