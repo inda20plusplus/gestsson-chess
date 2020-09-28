@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/inda20plusplus/gestsson-chess.svg?branch=master)](https://travis-ci.org/inda20plusplus/gestsson-chess)
+
 # gestsson-chess
 
 Jag försökte skriva det så att gui inte ska behöva fippla med pjäser individuellt.
