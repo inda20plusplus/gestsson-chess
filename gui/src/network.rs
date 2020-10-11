@@ -1,7 +1,3 @@
-use chess_engine::pieces::default::*;
-use chess_engine::Board;
-use chess_engine::Team;
-
 use std::thread;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
@@ -30,7 +26,6 @@ pub enum MessageType {
 
 pub struct Net{
     host: bool,
-    addr: String,
     stream: TcpStream, 
     rx: mpsc::Receiver<MessageType>, 
 }
@@ -59,7 +54,6 @@ impl Net{
 
         Self {
             host,
-            addr,
             stream,
             rx, 
         }
@@ -86,7 +80,6 @@ impl Net{
 
         Self {
             host,
-            addr,
             stream,
             rx, 
         }
@@ -131,18 +124,6 @@ pub fn decode_message(message: [u8; 32]) -> MessageType{
         _ => MessageType::Other,
     }
 }
-
-/*
-pub fn encode_piece(piece_type: MessageType) -> u8{
-    match piece_type{
-        Pawn => 0, 
-        Knight => 1,
-        Bishop => 2, 
-        Rook => 3,
-        Queen => 4,
-        King => 5,
-    }
-}*/
 
 pub fn encode_message(message: MessageType) -> Vec<u8> {
     let mut encoded_message = Vec::<u8>::new();  

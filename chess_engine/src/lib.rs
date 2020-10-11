@@ -8,7 +8,6 @@ use pieces::*;
 
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::mem::replace;
 
 #[cfg(test)]
 mod tests {
@@ -229,7 +228,7 @@ impl Board {
 
     pub fn get_threatened(&self, team: Team) -> BoolGrid {
         let mut grid = EMPTY_BOOLGRID;
-        let pieces = self.enumerate_pieces(|piece, pos| piece.team != team);
+        let pieces = self.enumerate_pieces(|piece, _pos| piece.team != team);
 
         for point in pieces {
             let piece = self.tiles[point.0][point.1].as_ref().unwrap();
@@ -331,15 +330,15 @@ impl Board {
     }
 
     pub fn get_selectable(&self) -> Vec<Point> {
-        self.enumerate_pieces(|piece, point| piece.team == self.current_player)
+        self.enumerate_pieces(|piece, _point| piece.team == self.current_player)
     }
 
     pub fn get_kings(&self) -> Vec<Point> {
-        self.enumerate_pieces(|piece, point| piece.necessity)
+        self.enumerate_pieces(|piece, _point| piece.necessity)
     }
 
     pub fn get_enemies(&self) -> Vec<Point> {
-        self.enumerate_pieces(|piece, (x, y)| piece.team != self.current_player)
+        self.enumerate_pieces(|piece, (_x, _y)| piece.team != self.current_player)
     }
 
     pub fn get_movable(&self) -> Vec<Point> {

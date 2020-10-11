@@ -49,7 +49,7 @@ impl ChessMove for RegularMove {
         self.to
     }
 
-    fn perform(&mut self, mut tiles: &mut BoardCollection) {
+    fn perform(&mut self, tiles: &mut BoardCollection) {
         self.prev_state = tiles[self.from.0][self.from.1].clone();
 
         let mut next = self.prev_state.clone();
@@ -65,7 +65,7 @@ impl ChessMove for RegularMove {
         tiles[self.from.0][self.from.1] = None;
     }
 
-    fn reverse(&mut self, mut tiles: &mut BoardCollection) {
+    fn reverse(&mut self, tiles: &mut BoardCollection) {
         tiles[self.from.0][self.from.1] = self.prev_state.clone();
 
         tiles[self.to.0][self.to.1] = self.killed.clone();
