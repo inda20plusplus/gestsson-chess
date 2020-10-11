@@ -205,7 +205,12 @@ pub fn rook_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) 
     tiles
 }
 
-pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) -> MoveCollection {
+pub fn bishop_moves(
+    piece: &Piece,
+    pos: Point,
+    board: &Board,
+    _only_lethal: bool,
+) -> MoveCollection {
     let mut tiles = MoveCollection::new();
 
     place_beam(pos, piece.team, 1, 1, &mut tiles, board);
@@ -231,7 +236,12 @@ pub fn queen_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool)
     tiles
 }
 
-pub fn knight_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) -> MoveCollection {
+pub fn knight_moves(
+    piece: &Piece,
+    pos: Point,
+    board: &Board,
+    _only_lethal: bool,
+) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;

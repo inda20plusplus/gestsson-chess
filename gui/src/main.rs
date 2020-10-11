@@ -8,7 +8,7 @@ use ggez::event::{self, MouseButton};
 use ggez::nalgebra as na;
 use ggez::{graphics, Context, GameResult};
 use std::path;
-pub mod network; 
+pub mod network;
 
 const BOARD_OFFSET_X: usize = 10;
 const BOARD_OFFSET_Y: usize = 10;
@@ -184,21 +184,21 @@ fn coordinates_to_tile(x: f32, y: f32) -> (i64, i64) {
 
 struct MainState {
     board: Board,
-    network: Option<network::Net>, 
+    network: Option<network::Net>,
 }
 
 impl MainState {
     fn new(network: Option<network::Net>) -> GameResult<MainState> {
         let s = MainState {
             board: Board::new(None),
-            network: network, 
+            network: network,
         };
         Ok(s)
     }
 
-    fn make_move(&mut self, x: i64, y: i64) -> bool{
+    fn make_move(&mut self, x: i64, y: i64) -> bool {
         let moves = self.board.get_movable();
-        
+
         for point in moves.iter() {
             if point.0 as i64 == x && point.1 as i64 == y {
                 self.board.move_piece(*point);
@@ -206,7 +206,7 @@ impl MainState {
                     promote(&mut self.board);
                 }
                 self.board.deselect();
-                return true
+                return true;
             }
         }
         self.board.deselect();
@@ -214,29 +214,35 @@ impl MainState {
     }
 
     fn place_piece(&mut self, x: i64, y: i64) {
-        if x != -1 && y != -1{
+        if x != -1 && y != -1 {
             if let Some(network) = self.network.as_mut() {
-                if (network.is_host() == true && self.board.current_player == Team::Black) || (network.is_host() == false && self.board.current_player == Team::White){
-                    return; 
+                if (network.is_host() == true && self.board.current_player == Team::Black)
+                    || (network.is_host() == false && self.board.current_player == Team::White)
+                {
+                    return;
                 }
             }
 
-            let mut selected_piece = (0, 0); 
-            if let Some(held) = self.board.held_piece{
-                selected_piece = held; 
-            } 
+            let mut selected_piece = (0, 0);
+            if let Some(held) = self.board.held_piece {
+                selected_piece = held;
+            }
 
-            if self.make_move(x, y){
-                let pos1 = network::encode_position(selected_piece.0 as i64, selected_piece.1 as i64); 
-                let pos2 = network::encode_position(x, y); 
+            if self.make_move(x, y) {
+                let pos1 =
+                    network::encode_position(selected_piece.0 as i64, selected_piece.1 as i64);
+                let pos2 = network::encode_position(x, y);
 
-                self.send_message(network::MessageType::Move(
-                    network::Move::Standard(pos1, pos2)
-                )); 
-            } 
+                self.send_message(network::MessageType::Move(network::Move::Standard(
+                    pos1, pos2,
+                )));
+            }
 
             if self.board.held_piece == None {
-                if self.board.is_team((x as usize, y as usize), self.board.current_player) {
+                if self
+                    .board
+                    .is_team((x as usize, y as usize), self.board.current_player)
+                {
                     self.board.select((x as usize, y as usize));
                 }
             }
@@ -248,33 +254,33 @@ impl MainState {
             Some(network) => network.send_message(message),
             None => (),
         }
-    } 
+    }
 
-    fn receive_message(&mut self) -> network::MessageType{
+    fn receive_message(&mut self) -> network::MessageType {
         if let Some(network) = self.network.as_mut() {
             return network.receive_message();
         }
         network::MessageType::Other
     }
 
-    fn check_for_message(&mut self){
-        let message = self.receive_message(); 
-        match message{
-            network::MessageType::Move(mv) => {
-                match mv{
-                    network::Move::Standard(pos1, pos2) => {
-                        let select = network::decode_position(pos1); 
-                        let mv = network::decode_position(pos2); 
-                        self.board.select((select.0 as usize, select.1 as usize)); 
-                        self.make_move(mv.0, mv.1); 
-                    },
-                    network::Move::EnPassant(pos1, pos2) => println!("EnPassant: {}, {}", pos1, pos2),
-                    network::Move::Promotion(pos1, pos2, piece_type) => println!("Promotion: {}, {}, {}", pos1, pos2, piece_type),
-                    network::Move::KingsideCastling => println!("King"),
-                    network::Move::QueensideCastling => println!("Queen"),
-                    _ => (), 
+    fn check_for_message(&mut self) {
+        let message = self.receive_message();
+        match message {
+            network::MessageType::Move(mv) => match mv {
+                network::Move::Standard(pos1, pos2) => {
+                    let select = network::decode_position(pos1);
+                    let mv = network::decode_position(pos2);
+                    self.board.select((select.0 as usize, select.1 as usize));
+                    self.make_move(mv.0, mv.1);
                 }
-            }
+                network::Move::EnPassant(pos1, pos2) => println!("EnPassant: {}, {}", pos1, pos2),
+                network::Move::Promotion(pos1, pos2, piece_type) => {
+                    println!("Promotion: {}, {}, {}", pos1, pos2, piece_type)
+                }
+                network::Move::KingsideCastling => println!("King"),
+                network::Move::QueensideCastling => println!("Queen"),
+                _ => (),
+            },
             _ => (),
         }
     }
@@ -282,7 +288,7 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, _ctx: &mut ggez::Context) -> GameResult {
-        self.check_for_message(); 
+        self.check_for_message();
         Ok(())
     }
 
@@ -315,24 +321,24 @@ impl event::EventHandler for MainState {
 
 pub fn main() -> GameResult {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let mode = args[0].to_owned(); 
+    let mode = args[0].to_owned();
 
-    let net; 
+    let net;
 
-    match mode.as_str(){
+    match mode.as_str() {
         "single" => {
-            net = None; 
+            net = None;
         }
         "host" => {
-            let addr = args[1].to_owned(); 
-            net = Some(network::Net::connect(true, addr.to_owned())); 
-        },
+            let addr = args[1].to_owned();
+            net = Some(network::Net::connect(true, addr.to_owned()));
+        }
         "client" => {
-            let addr = args[1].to_owned(); 
-            net = Some(network::Net::connect(false, addr.to_owned())); 
-        },
+            let addr = args[1].to_owned();
+            net = Some(network::Net::connect(false, addr.to_owned()));
+        }
         _ => panic!("Invalid mode"),
-    } 
+    }
 
     let cb = ggez::ContextBuilder::new("Chess", "ggez")
         .add_resource_path(path::PathBuf::from("./gui/resources"));
