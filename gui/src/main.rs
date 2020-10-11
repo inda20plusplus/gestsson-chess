@@ -8,6 +8,7 @@ use ggez::event::{self, MouseButton};
 use ggez::nalgebra as na;
 use ggez::{graphics, Context, GameResult};
 use std::path;
+pub mod network; 
 
 const BOARD_OFFSET_X: usize = 10;
 const BOARD_OFFSET_Y: usize = 10;
@@ -144,29 +145,6 @@ fn display_state(ctx: &mut ggez::Context, board: &mut Board) {
     }
 }
 
-fn place_piece(board: &mut Board, x: i64, y: i64) {
-    if x != -1 && y != -1 {
-        let moves = board.get_movable();
-
-        for point in moves.iter() {
-            if point.0 as i64 == x && point.1 as i64 == y {
-                board.move_piece(*point);
-                if board.can_promote() {
-                    promote(board);
-                }
-            }
-        }
-
-        board.deselect();
-
-        if board.held_piece == None {
-            if board.is_team((x as usize, y as usize), board.current_player) {
-                board.select((x as usize, y as usize));
-            }
-        }
-    }
-}
-
 fn promote(board: &mut Board) {
     let name =
         dialog::Input::new("Promote to: Queen (Q, q), Knight (N, n), Rook (R, r), Bishop (B, b)")
@@ -206,19 +184,105 @@ fn coordinates_to_tile(x: f32, y: f32) -> (i64, i64) {
 
 struct MainState {
     board: Board,
+    network: Option<network::Net>, 
 }
 
 impl MainState {
-    fn new() -> GameResult<MainState> {
+    fn new(network: Option<network::Net>) -> GameResult<MainState> {
         let s = MainState {
             board: Board::new(None),
+            network: network, 
         };
         Ok(s)
+    }
+
+    fn make_move(&mut self, x: i64, y: i64) -> bool{
+        let moves = self.board.get_movable();
+        
+        for point in moves.iter() {
+            if point.0 as i64 == x && point.1 as i64 == y {
+                self.board.move_piece(*point);
+                if self.board.can_promote() {
+                    promote(&mut self.board);
+                }
+                self.board.deselect();
+                return true
+            }
+        }
+        self.board.deselect();
+        false
+    }
+
+    fn place_piece(&mut self, x: i64, y: i64) {
+        if x != -1 && y != -1{
+            if let Some(network) = self.network.as_mut() {
+                if (network.is_host() == true && self.board.current_player == Team::Black) || (network.is_host() == false && self.board.current_player == Team::White){
+                    return; 
+                }
+            }
+
+            let mut selected_piece = (0, 0); 
+            if let Some(held) = self.board.held_piece{
+                selected_piece = held; 
+            } 
+
+            if self.make_move(x, y){
+                let pos1 = network::encode_position(selected_piece.0 as i64, selected_piece.1 as i64); 
+                let pos2 = network::encode_position(x, y); 
+
+                self.send_message(network::MessageType::Move(
+                    network::Move::Standard(pos1, pos2)
+                )); 
+            } 
+
+            if self.board.held_piece == None {
+                if self.board.is_team((x as usize, y as usize), self.board.current_player) {
+                    self.board.select((x as usize, y as usize));
+                }
+            }
+        }
+    }
+
+    fn send_message(&mut self, message: network::MessageType) {
+        match self.network.as_mut() {
+            Some(network) => network.send_message(message),
+            None => (),
+        }
+    } 
+
+    fn receive_message(&mut self) -> network::MessageType{
+        if let Some(network) = self.network.as_mut() {
+            return network.receive_message();
+        }
+        network::MessageType::Other
+    }
+
+    fn check_for_message(&mut self){
+        let message = self.receive_message(); 
+        match message{
+            network::MessageType::Move(mv) => {
+                match mv{
+                    network::Move::Standard(pos1, pos2) => {
+                        let select = network::decode_position(pos1); 
+                        let mv = network::decode_position(pos2); 
+                        self.board.select((select.0 as usize, select.1 as usize)); 
+                        self.make_move(mv.0, mv.1); 
+                    },
+                    network::Move::EnPassant(pos1, pos2) => println!("EnPassant: {}, {}", pos1, pos2),
+                    network::Move::Promotion(pos1, pos2, piece_type) => println!("Promotion: {}, {}, {}", pos1, pos2, piece_type),
+                    network::Move::KingsideCastling => println!("King"),
+                    network::Move::QueensideCastling => println!("Queen"),
+                    _ => (), 
+                }
+            }
+            _ => (),
+        }
     }
 }
 
 impl event::EventHandler for MainState {
     fn update(&mut self, _ctx: &mut ggez::Context) -> GameResult {
+        self.check_for_message(); 
         Ok(())
     }
 
@@ -242,7 +306,7 @@ impl event::EventHandler for MainState {
         match _button {
             MouseButton::Left => {
                 let (x, y) = coordinates_to_tile(_x, _y);
-                place_piece(&mut self.board, x, y);
+                self.place_piece(x, y);
             }
             _ => (),
         }
@@ -250,9 +314,29 @@ impl event::EventHandler for MainState {
 }
 
 pub fn main() -> GameResult {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mode = args[0].to_owned(); 
+
+    let net; 
+
+    match mode.as_str(){
+        "single" => {
+            net = None; 
+        }
+        "host" => {
+            let addr = args[1].to_owned(); 
+            net = Some(network::Net::connect(true, addr.to_owned())); 
+        },
+        "client" => {
+            let addr = args[1].to_owned(); 
+            net = Some(network::Net::connect(false, addr.to_owned())); 
+        },
+        _ => panic!("Invalid mode"),
+    } 
+
     let cb = ggez::ContextBuilder::new("Chess", "ggez")
         .add_resource_path(path::PathBuf::from("./gui/resources"));
     let (ctx, event_loop) = &mut cb.build()?;
-    let state = &mut MainState::new()?;
+    let state = &mut MainState::new(net)?;
     event::run(ctx, event_loop, state)
 }

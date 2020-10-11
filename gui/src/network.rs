@@ -3,15 +3,14 @@ use chess_engine::Board;
 use chess_engine::Team;
 
 use std::thread;
-use std::net::{TcpListener, TcpStream, Shutdown};
+use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::str::from_utf8;
-use std::thread::{spawn, JoinHandle};
+use std::sync::mpsc;
 
 pub enum Move {
-    Standard(i64, i64),
-    EnPassant(i64, i64),
-    Promotion(i64, i64, i64),
+    Standard(u8, u8),
+    EnPassant(u8, u8),
+    Promotion(u8, u8, u8),
     KingsideCastling,
     QueensideCastling,
     Other,
@@ -28,95 +27,90 @@ pub enum MessageType {
     Other,
 }
 
+
 pub struct Net{
     host: bool,
-    ip: String,
-    has_received: bool,
-    read_data: String, 
+    addr: String,
+    stream: TcpStream, 
+    rx: mpsc::Receiver<MessageType>, 
 }
 
 impl Net{
-    pub fn new(host: bool, ip: String) -> Net{  
-        let mut receive = false; 
+    pub fn connect(host: bool, addr: String) -> Self{
         if host == true{
-            receive = true; 
-        }
-        Net{
-            host: host, 
-            ip: ip,
-            has_received: receive,
-            read_data: "".to_string(), 
-        }
-    }
-
-    pub fn connect(&mut self){
-        if self.host == true{
-            self.start_host(); 
+            Self::init_host(host, addr) 
         }
         else{
-            self.start_client(); 
+            Self::init_client(host, addr)
         }
     }
 
-    pub fn start_client(&mut self) {
-        match TcpStream::connect(self.ip.to_owned()) {
-            Ok (stream) => {   
-                loop{
-                    self.handle_client(stream.try_clone().ok().unwrap()); 
-                } 
-            },
-            Err(_) => {
-                //
+    pub fn init_client(host: bool, addr: String) -> Self{
+        let (tx, rx) = mpsc::channel::<MessageType>(); 
+        let stream = TcpStream::connect(addr.to_owned()).ok().unwrap(); 
+        let mut socket = stream.try_clone().ok().unwrap(); 
+        let mut buffer = [0; 32]; 
+        thread::spawn(move || {
+            while let Ok(message) = socket.read(&mut buffer) {
+                if message == 0{break;}
+                tx.send(decode_message(buffer)).expect("Error while sending message"); 
             }
+        }); 
+
+        Self {
+            host,
+            addr,
+            stream,
+            rx, 
         }
     }
 
-    pub fn start_host(&mut self) {
-        let listener = TcpListener::bind(self.ip.to_owned()).unwrap(); 
-        println!("Server listening on {}", self.ip); 
+    pub fn init_host(host: bool, addr: String) -> Self{
+        let (tx, rx) = mpsc::channel::<MessageType>(); 
 
-        for stream in listener.incoming() {
-            loop{
-                self.handle_client(stream.try_clone().ok().unwrap()); 
+        let listener = TcpListener::bind(addr.to_owned()).unwrap(); 
+        println!("Listening on {}", addr); 
+
+        let (mut socket, _) = listener.accept().unwrap();
+        println!("Client has connected to {}", addr); 
+
+        let stream = socket.try_clone().ok().unwrap(); 
+
+        let mut buffer = [0; 32]; 
+        thread::spawn(move || {
+            while let Ok(message) = socket.read(&mut buffer) {
+                if message == 0{break;}
+                tx.send(decode_message(buffer)).expect("Error while sending message"); 
             }
-        }
+        });
 
-        drop(listener);
-    }
-
-    pub fn handle_client(&mut self, mut stream: TcpStream){
-        if self.has_received == true{
-            println!("Data: {:?}", self.read_data);
-            let msg = b"Hello!";
-            stream.write(msg).unwrap(); 
-            self.has_received = false; 
-        }
-        else{
-            println!("Receiving data");
-            self.receive_message(stream); 
-            println!("Done receiving data"); 
-            self.has_received = true; 
+        Self {
+            host,
+            addr,
+            stream,
+            rx, 
         }
     }
-
-    pub fn receive_message(&mut self, mut stream: TcpStream) {
-        let mut data = [0 as u8; 6]; 
-        match stream.read(&mut data) {
-            Ok(size) => {
-                let mut text = from_utf8(&data).unwrap().to_string().to_owned();
-                text.pop(); 
-                println!("Size: {}, Text: {}", size, text); 
-                self.read_data = text;
-            },
-            Err(_) => {
-                println!("An error occurred, terminating connection with {}", stream.peer_addr().unwrap());
-                stream.shutdown(Shutdown::Both).unwrap();
-            }
+ 
+    pub fn receive_message(&mut self) -> MessageType {
+        //println! ("Message recieved"); 
+        let mut message = MessageType::Other; 
+        while let Ok(msg) = self.rx.try_recv(){
+            message = msg; 
         }
+        message
+    }
+
+    pub fn send_message(&mut self, message: MessageType) {
+        self.stream.write(&encode_message(message)).expect("Failed writing"); 
+    } 
+
+    pub fn is_host(&self) -> bool { 
+        self.host
     }
 }
 
-pub fn parse_message(message: [u8, 32]) -> String{
+pub fn decode_message(message: [u8; 32]) -> MessageType{
     match message[0] {
         0 => MessageType::Decline, 
         1 => {
@@ -138,15 +132,46 @@ pub fn parse_message(message: [u8, 32]) -> String{
     }
 }
 
-pub fn encode_message(type: MessageType) {
-    match type{
-        Decline => 0, 
-        Move() => 1,
-        Undo => 2, 
-        Accept => 3,
-        Checkmate => 4,
-        Draw => 5,
-        Resign => 6,
-        _ => -1, 
+/*
+pub fn encode_piece(piece_type: MessageType) -> u8{
+    match piece_type{
+        Pawn => 0, 
+        Knight => 1,
+        Bishop => 2, 
+        Rook => 3,
+        Queen => 4,
+        King => 5,
     }
+}*/
+
+pub fn encode_message(message: MessageType) -> Vec<u8> {
+    let mut encoded_message = Vec::<u8>::new();  
+    match message {
+        MessageType::Decline =>  encoded_message.push(0), 
+        MessageType::Move(mv) =>  {
+            match mv {
+                Move::Standard(pos1, pos2) => encoded_message.extend_from_slice(&[1, 0, pos1, pos2]),
+                Move::EnPassant(pos1, pos2) => encoded_message.extend_from_slice(&[1, 1, pos1, pos2]),
+                Move::Promotion(pos1, pos2, piece_type) => encoded_message.extend_from_slice(&[1, 2, pos1, pos2, piece_type]),
+                Move::KingsideCastling => encoded_message.extend_from_slice(&[1, 3]),
+                Move::QueensideCastling => encoded_message.extend_from_slice(&[1, 4]),
+                _ => (), 
+            }
+        } 
+        MessageType::Undo =>  encoded_message.push(2), 
+        MessageType::Accept =>  encoded_message.push(3), 
+        MessageType::Checkmate =>  encoded_message.push(4), 
+        MessageType::Draw =>  encoded_message.push(5), 
+        MessageType::Resign =>  encoded_message.push(6), 
+        _ => (), 
+    }
+    encoded_message
 }
+
+pub fn decode_position(pos: u8) -> (i64, i64) {
+    (pos as i64 % 8, pos as i64 / 8)
+}
+
+pub fn encode_position(x: i64, y: i64) -> u8 {
+    x as u8 + (y as u8 * 8)
+} 
