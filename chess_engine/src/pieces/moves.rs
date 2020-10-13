@@ -15,7 +15,7 @@ fn place_regular(from: Point, (x, y): Point, collection: &mut MoveCollection) {
 
 fn place_enpassant(
     from: Point,
-    mut x: i32,
+    x: i32,
     y: i32,
     stride: i32,
     collection: &mut MoveCollection,
@@ -120,7 +120,7 @@ fn place_beam(
     }
 }
 
-pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -> MoveCollection {
+pub fn pawn_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) -> MoveCollection {
     let stride = board.config.white_stride * piece.team as i32;
     let mut tiles = MoveCollection::new();
 
@@ -161,7 +161,7 @@ pub fn king_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -
     if !only_lethal && pos.0 == 4 && (pos.1 == 0 || pos.1 == 7) {
         let threatened = board.get_threatened(piece.team);
 
-        for rook in board.enumerate_pieces(|piece, point| {
+        for rook in board.enumerate_pieces(|piece, _point| {
             piece.name == "Rook" && piece.team == board.current_player
         }) {
             if rook.1 != pos.1 || (rook.0 != 0 && rook.0 != 7) {
@@ -193,7 +193,7 @@ pub fn king_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -
     tiles
 }
 
-pub fn rook_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -> MoveCollection {
+pub fn rook_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
 
     place_beam(pos, piece.team, 1, 0, &mut tiles, board);
@@ -205,7 +205,12 @@ pub fn rook_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -
     tiles
 }
 
-pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -> MoveCollection {
+pub fn bishop_moves(
+    piece: &Piece,
+    pos: Point,
+    board: &Board,
+    _only_lethal: bool,
+) -> MoveCollection {
     let mut tiles = MoveCollection::new();
 
     place_beam(pos, piece.team, 1, 1, &mut tiles, board);
@@ -216,7 +221,7 @@ pub fn bishop_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool)
     tiles
 }
 
-pub fn queen_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -> MoveCollection {
+pub fn queen_moves(piece: &Piece, pos: Point, board: &Board, _only_lethal: bool) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     place_beam(pos, piece.team, 1, 1, &mut tiles, board);
     place_beam(pos, piece.team, -1, -1, &mut tiles, board);
@@ -231,7 +236,12 @@ pub fn queen_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) 
     tiles
 }
 
-pub fn knight_moves(piece: &Piece, pos: Point, board: &Board, only_lethal: bool) -> MoveCollection {
+pub fn knight_moves(
+    piece: &Piece,
+    pos: Point,
+    board: &Board,
+    _only_lethal: bool,
+) -> MoveCollection {
     let mut tiles = MoveCollection::new();
     let x = pos.0 as i32;
     let y = pos.1 as i32;
